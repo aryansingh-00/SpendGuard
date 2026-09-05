@@ -1,0 +1,468 @@
+// Prisma Schema for SpendGuard AI
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id               String            @id @default(cuid())
+  name             String
+  industry         String?
+  size             String?
+  currency         String            @default("INR")
+  monthlyBudget    Float             @default(0.0)
+  logoUrl          String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  users            User[]
+  departments      Department[]
+  employeeProfiles EmployeeProfile[]
+  policies         Policy[]
+  expenses         Expense[]
+  budgets          Budget[]
+  vendors          Vendor[]
+  approvals        Approval[]
+  auditLogs        AuditLog[]
+  paymentTransactions PaymentTransaction[]
+  expenseReceipts  ExpenseReceipt[]
+  receiptAnalyses  ReceiptAnalysis[]
+  expenseVerifications ExpenseVerification[]
+  aiInsights       AIInsight[]
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  name             String
+  role             String            @default("FINANCE_ADMIN") // FINANCE_ADMIN, MANAGER, EMPLOYEE
+  avatarUrl        String?
+  passwordHash     String?
+  companyId        String?
+  company          Company?          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  employeeProfile  EmployeeProfile?
+  managedDepts     Department[]      @relation("DepartmentManager")
+  approvals        Approval[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  uploadedReceipts ExpenseReceipt[]
+
+  @@index([companyId])
+}
+
+model Department {
+  id               String            @id @default(cuid())
+  name             String
+  code             String?
+  description      String?
+  monthlyBudget    Float             @default(0.0)
+  companyId        String
+  company          Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  managerId        String?
+  manager          User?             @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  employeeProfiles EmployeeProfile[]
+  policies         Policy[]
+  expenses         Expense[]
+  budgets          Budget[]
+
+  @@index([companyId])
+}
+
+model EmployeeProfile {
+  id             String      @id @default(cuid())
+  userId         String      @unique
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId      String
+  company        Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  monthlyBudget  Float       @default(0.0)
+  jobTitle       String?
+  status         String      @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  expenses       Expense[]
+  budgets        Budget[]
+  policies       Policy[]
+
+  @@index([companyId])
+  @@index([departmentId])
+}
+
+model Budget {
+  id                String           @id @default(cuid())
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  entityType        String           // COMPANY, DEPARTMENT, EMPLOYEE
+  entityId          String           // companyId, departmentId, or employeeProfileId
+  period            String           @default("MONTHLY") // MONTHLY, QUARTERLY, ANNUAL
+  amount            Float
+  spent             Float            @default(0.0)
+  currency          String           @default("INR")
+  startDate         DateTime
+  endDate           DateTime
+  departmentId      String?
+  department        Department?      @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  employeeProfileId String?
+  employeeProfile   EmployeeProfile? @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([companyId])
+  @@index([entityType, entityId])
+}
+
+model Policy {
+  id                   String           @id @default(cuid())
+  name                 String
+  description          String?
+  scopeType            String           @default("COMPANY") // COMPANY, DEPARTMENT, EMPLOYEE
+  departmentId         String?
+  department           Department?      @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  employeeProfileId    String?
+  employeeProfile      EmployeeProfile? @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  monthlyLimit         Float?
+  maxTransactionAmount Float            @default(50000.0)
+  approvalThreshold    Float            @default(10000.0)
+  allowedCategories    String           @default("[]") // JSON string array e.g. ["Advertising", "Software"]
+  blockedCategories    String           @default("[]") // JSON string array e.g. ["Gambling", "Cryptocurrency"]
+  allowedMerchants     String           @default("[]") // JSON string array e.g. ["Meta", "Google Ads"]
+  blockedMerchants     String           @default("[]") // JSON string array e.g. ["Casino", "BettingSite"]
+  requireReceiptAbove  Float            @default(1000.0)
+  isActive             Boolean          @default(true)
+  companyId            String
+  company              Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([companyId])
+  @@index([scopeType, departmentId])
+  @@index([scopeType, employeeProfileId])
+}
+
+model Vendor {
+  id              String    @id @default(cuid())
+  name            String
+  category        String?
+  riskRating      String    @default("LOW") // LOW, MEDIUM, HIGH, BLOCKED
+  isApproved      Boolean   @default(true)
+  defaultCategory String?
+  companyId       String
+  company         Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([companyId, name])
+}
+
+model Expense {
+  id                String           @id @default(cuid())
+  expenseNumber     String           @unique
+  employeeProfileId String
+  employeeProfile   EmployeeProfile  @relation(fields: [employeeProfileId], references: [id], onDelete: Cascade)
+  departmentId      String
+  department        Department       @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  merchantName      String
+  amount            Float
+  currency          String           @default("INR")
+  category          String
+  purpose           String
+  expenseDate       DateTime         @default(now())
+  policyDecision    String?          // APPROVED, APPROVAL_REQUIRED, BLOCKED
+  policyReasons     String?          // JSON string array of formatted reasons
+  status            String           @default("PENDING_APPROVAL")
+  paymentStatus     String           @default("UNPAID")
+  decisionReason    String?
+  policyViolations  String?          // JSON string array
+  companyId         String
+  company           Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  receipt           Receipt?
+  expenseReceipts   ExpenseReceipt[]
+  verifications     ExpenseVerification[]
+  aiAnalysis        AIAnalysis?
+  approvals         Approval[]
+  transactions      Transaction[]
+  paymentTransactions PaymentTransaction[]
+
+  @@index([employeeProfileId, status])
+  @@index([departmentId, status])
+  @@index([companyId])
+}
+
+model Receipt {
+  id                     String    @id @default(cuid())
+  expenseId              String    @unique
+  expense                Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  fileUrl                String
+  fileName               String
+  fileSize               Int?
+  mimeType               String?
+  extractedMerchant      String?
+  extractedAmount        Float?
+  extractedDate          String?
+  extractedInvoiceNumber String?
+  extractedTax           Float?
+  extractedCategory      String?
+  confidenceScore        Float?
+  rawOcrData             String?
+  createdAt              DateTime  @default(now())
+}
+
+model ExpenseReceipt {
+  id              String            @id @default(cuid())
+  companyId       String
+  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  expenseId       String
+  expense         Expense           @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  fileName        String
+  fileType        String            // e.g. "application/pdf", "image/png", "image/jpeg", "image/webp"
+  fileSize        Int
+  fileHash        String?           // SHA-256 cryptographic hash for duplicate detection
+  storageKey      String            // Path/key in storage provider
+  status          String            @default("UPLOADED") // UPLOADED, PROCESSING, PROCESSED, FAILED
+  uploadedById    String?
+  uploadedBy      User?             @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  receiptAnalyses ReceiptAnalysis[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([companyId])
+  @@index([expenseId])
+  @@index([uploadedById])
+  @@index([fileHash])
+  @@index([status])
+}
+
+model ReceiptAnalysis {
+  id                   String                @id @default(cuid())
+  companyId            String
+  company              Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  receiptId            String
+  receipt              ExpenseReceipt        @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  merchantName         String?
+  invoiceNumber        String?
+  transactionDate      String?
+  subtotal             Float?
+  tax                  Float?
+  totalAmount          Float?
+  currency             String?               @default("INR")
+  category             String?
+  lineItems            String?               // JSON string array of { name, quantity, unitPrice, total }
+  confidence           Float?                // 0.0 to 1.0 (or 0-100)
+  missingFields        String?               // JSON string array of missing fields
+  rawStructuredData    String?               // JSON string of full extraction payload
+  modelName            String?               // e.g. "gemini-1.5-flash", "demo-extractor-v1"
+  status               String                @default("PROCESSED") // PROCESSING, PROCESSED, FAILED, REVIEW_REQUIRED
+  expenseVerifications ExpenseVerification[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@index([companyId])
+  @@index([receiptId])
+  @@index([status])
+}
+
+model ExpenseVerification {
+  id                 String          @id @default(cuid())
+  companyId          String
+  company            Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  expenseId          String
+  expense            Expense         @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  receiptAnalysisId  String
+  receiptAnalysis    ReceiptAnalysis @relation(fields: [receiptAnalysisId], references: [id], onDelete: Cascade)
+  status             String          @default("VERIFIED") // VERIFIED, REVIEW_REQUIRED, MISMATCH, FAILED
+  overallScore       Int             @default(0) // 0-100
+  amountScore        Int             @default(0) // 0-40
+  amountMatch        Boolean         @default(false)
+  merchantScore      Int             @default(0) // 0-25
+  merchantMatch      Boolean         @default(false)
+  dateScore          Int             @default(0) // 0-15
+  dateMatch          Boolean         @default(false)
+  currencyScore      Int             @default(0) // 0-10
+  currencyMatch      Boolean         @default(false)
+  categoryScore      Int             @default(0) // 0-10
+  categoryMatch      Boolean         @default(false)
+  duplicateIndicator String?         // "NONE", "EXACT_HASH_MATCH", "INVOICE_MERCHANT_MATCH", "DUPLICATE_REVIEW"
+  mismatchReasons    String?         // JSON string array of explanation notes
+  matchBreakdown     String?         // JSON string with individual match breakdown
+  recommendation     String          @default("PROCEED") // PROCEED, REVIEW, BLOCK
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([companyId])
+  @@index([expenseId])
+  @@index([receiptAnalysisId])
+  @@index([status])
+}
+
+model AIAnalysis {
+  id                 String    @id @default(cuid())
+  expenseId          String    @unique
+  expense            Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  riskScore          Int?      // 0-100 (null if unavailable)
+  riskLevel          String    // LOW, MEDIUM, HIGH, UNAVAILABLE
+  summary            String?
+  reason             String?
+  recommendation     String    // PROCEED, REVIEW, HIGH_RISK_REVIEW, APPROVE, APPROVAL_REQUIRED, BLOCK
+  signals            String?   // JSON array of { type, severity, message }
+  anomaliesDetected  String?   // JSON string array
+  suggestedCategory  String?
+  duplicateRiskScore Int?      @default(0)
+  isDuplicate        Boolean   @default(false)
+  duplicateExpenseId String?
+  model              String?   // e.g. "gemini-1.5-flash", "mock-v1"
+  rawAnalysis        String?
+  createdAt          DateTime  @default(now())
+  analyzedAt         DateTime  @default(now())
+}
+
+model Approval {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  expenseId  String
+  expense    Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  approverId String?
+  approver   User?     @relation(fields: [approverId], references: [id], onDelete: SetNull)
+  status     String    @default("PENDING") // PENDING, APPROVED, REJECTED, CANCELLED
+  decision   String?   // APPROVED, REJECTED
+  comment    String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  decidedAt  DateTime?
+
+  @@index([companyId])
+  @@index([expenseId])
+  @@index([approverId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AuditLog {
+  id         String    @id @default(cuid())
+  companyId  String
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  actorId    String?
+  actor      User?     @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String    // APPROVAL_REQUEST_CREATED, EXPENSE_APPROVED, EXPENSE_REJECTED, APPROVAL_COMMENT_ADDED, RECEIPT_UPLOADED, etc.
+  entityType String    // EXPENSE, APPROVAL, POLICY, BUDGET, USER, RECEIPT
+  entityId   String
+  metadata   String?   // JSON string
+  createdAt  DateTime  @default(now())
+
+  @@index([companyId])
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model PaymentTransaction {
+  id                 String    @id @default(cuid())
+  companyId          String
+  company            Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  expenseId          String
+  expense            Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  razorpayId         String?
+  razorpayOrderId    String?
+  razorpayPaymentId  String?
+  razorpayPayoutId   String?
+  razorpaySignature  String?
+  type               String    @default("PAYMENT") // PAYMENT, PAYOUT
+  status             String    @default("CREATED") // CREATED, PROCESSING, SUCCESS, FAILED, CANCELLED
+  amount             Float
+  currency           String    @default("INR")
+  paymentMethod      String    @default("RAZORPAY")
+  idempotencyKey     String?   @unique
+  failureCode        String?
+  failureReason      String?
+  metadata           String?   // JSON metadata
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  completedAt        DateTime?
+
+  @@index([companyId])
+  @@index([expenseId])
+  @@index([razorpayId])
+  @@index([razorpayOrderId])
+  @@index([razorpayPaymentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Transaction {
+  id                 String    @id @default(cuid())
+  expenseId          String
+  expense            Expense   @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  amount             Float
+  currency           String    @default("INR")
+  paymentMethod      String    @default("RAZORPAY")
+  razorpayOrderId    String?
+  razorpayPaymentId  String?
+  razorpayPayoutId   String?
+  razorpaySignature  String?
+  status             String    @default("PENDING") // PENDING, SUCCESS, FAILED, REFUNDED
+  failureReason      String?
+  metadata           String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([razorpayOrderId])
+  @@index([razorpayPaymentId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String
+  isRead    Boolean   @default(false)
+  link      String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, isRead])
+}
+
+model AIInsight {
+  id                String    @id @default(cuid())
+  companyId         String
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  periodStart       DateTime
+  periodEnd         DateTime
+  type              String    // BUDGET_PRESSURE, SPENDING_SPIKE, CATEGORY_ANOMALY, MERCHANT_ANOMALY, APPROVAL_BACKLOG, RECEIPT_MISMATCH, PAYMENT_FAILURES, SAVINGS_OPPORTUNITY, GENERAL
+  severity          String    // INFO, WARNING, CRITICAL
+  title             String
+  explanation       String
+  recommendedAction String
+  actionLink        String?
+  evidence          String    // JSON string array of facts / statistics
+  status            String    @default("ACTIVE") // ACTIVE, DISMISSED, RESOLVED
+  departmentId      String?
+  modelName         String?   // e.g. "gemini-1.5-flash", "demo-finance-controller-v1"
+  generatedAt       DateTime  @default(now())
+  expiresAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([companyId])
+  @@index([status])
+  @@index([severity])
+  @@index([generatedAt])
+  @@index([departmentId])
+}
