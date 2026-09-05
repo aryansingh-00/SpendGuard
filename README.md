@@ -2,6 +2,9 @@
 
 > **Control every spend. Catch every risk.**
 
+🌐 **Live Production Deployment:** [https://safe-bound.vercel.app](https://safe-bound.vercel.app/)  
+📦 **GitHub Repository:** [https://github.com/aryansingh-00/SpendGuard](https://github.com/aryansingh-00/SpendGuard)
+
 **SpendGuard AI** is a production-grade AI Finance Controller built for modern enterprises to control, verify, approve, and analyze employee and business spending before and after payments occur.
 
 ---
